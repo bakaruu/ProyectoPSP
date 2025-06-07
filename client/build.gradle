@@ -1,0 +1,10 @@
+plugins { id 'application' }
+
+dependencies {
+    implementation project(':core')
+    implementation project(path: ':server')
+}
+
+application {
+    mainClass = 'client.ChatAppSwing'    // la crearemos después
+}

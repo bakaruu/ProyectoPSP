@@ -1,0 +1,42 @@
+# --- Gradle ---
+.gradle/                     # caches y artefactos de Gradle
+build/                       # salida de compilación de Gradle
+
+# Asegúrate de conservar los wrappers de Gradle
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# --- Wrapper scripts (se deben versionar) ---
+!gradlew
+!gradlew.bat
+
+# --- IntelliJ IDEA ---
+.idea/                       # configuración de proyecto local
+*.iml                        # módulos de IntelliJ
+out/                         # carpeta de salida por defecto de IDEA
+
+# --- Tu sección existente ---
+# Compiled class file
+*.class
+
+# Log file
+*.log
+
+# BlueJ files
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files #
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# virtual machine crash logs
+hs_err_pid*
+replay_pid*

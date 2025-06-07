@@ -1,0 +1,5 @@
+rootProject.name = 'proyectoPSP'
+include 'core'
+include 'client'
+include 'server'
+

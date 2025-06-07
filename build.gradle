@@ -1,0 +1,9 @@
+subprojects {
+    apply plugin: 'java'
+    repositories { mavenCentral() }
+
+    java {
+        sourceCompatibility = 17   // o 21
+        targetCompatibility = 17
+    }
+}

@@ -1,0 +1,9 @@
+plugins { id 'application' }
+
+dependencies {
+    implementation project(':core')
+}
+
+application {
+    mainClass = 'server.ChatServer'      // la crearemos después
+}

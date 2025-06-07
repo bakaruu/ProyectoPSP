@@ -1,0 +1,5 @@
+plugins { id 'java-library' }
+
+dependencies {
+    implementation 'org.xerial:sqlite-jdbc:3.45.2.0'   // para la caché de contactos
+}
