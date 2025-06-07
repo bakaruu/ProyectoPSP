@@ -2,65 +2,58 @@
 package client;
 
 import javax.swing.*;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.StyledDocument;
 import java.awt.*;
-import java.awt.event.ActionEvent;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.Base64;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.function.Consumer;
+import javax.imageio.ImageIO;
 
 /**
- * Ventana principal de chat: area de mensajes, cuadro de entrada,
- * boton de envio de texto y boton de envio de archivos.
+ * ChatWindow con previsualizacion de imagenes recibidas y guardado opcional.
  */
 public class ChatWindow extends JFrame {
-    private final JTextArea taChat   = new JTextArea();
+    private final Set<String> sentFiles = new HashSet<>();
+    private final JTextPane tpChat = new JTextPane();
     private final JTextField tfInput = new JTextField();
-    private final JButton btnSend    = new JButton("Enviar");
-    private final JButton btnFile    = new JButton("Enviar archivo");
-    private final ClientChat client  = new ClientChat();
+    private final JButton btnSend = new JButton("Enviar");
+    private final JButton btnFile = new JButton("Enviar archivo");
+    private final ClientChat client = new ClientChat();
 
     public ChatWindow(LoginData data) {
         super("Chat - " + data.getUsername());
         setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setLayout(new BorderLayout(5,5));
+        ((JComponent)getContentPane()).setBorder(BorderFactory.createEmptyBorder(10,10,10,10));
 
-        // Layout principal con espacios entre componentes
-        setLayout(new BorderLayout(5, 5));
-        // Margen alrededor de todo el contenido
-        ((JComponent) getContentPane()).setBorder(
-                BorderFactory.createEmptyBorder(10, 10, 10, 10)
-        );
-
-        // Area de chat central
-        taChat.setEditable(false);
-        taChat.setFont(taChat.getFont().deriveFont(14f));
-        JScrollPane scroll = new JScrollPane(taChat);
+        tpChat.setEditable(false);
+        JScrollPane scroll = new JScrollPane(tpChat);
         add(scroll, BorderLayout.CENTER);
 
-        // Panel inferior con boton archivo a la izquierda,
-        // campo de texto expansible y boton Enviar a la derecha
-        JPanel bottom = new JPanel(new BorderLayout(5, 5));
-        // Margen interno del panel inferior
-        bottom.setBorder(BorderFactory.createEmptyBorder(5, 0, 0, 0));
-
-        // Boton "Enviar archivo" al oeste
+        JPanel bottom = new JPanel(new BorderLayout(5,5));
+        bottom.setBorder(BorderFactory.createEmptyBorder(5,0,0,0));
         bottom.add(btnFile, BorderLayout.WEST);
-
-        // Campo de texto en el centro
         tfInput.setColumns(30);
         bottom.add(tfInput, BorderLayout.CENTER);
-
-        // Boton "Enviar" al este
         bottom.add(btnSend, BorderLayout.EAST);
-
         add(bottom, BorderLayout.SOUTH);
 
-        // Tamano inicial
         pack();
-        setSize(600, 400);
-        setMinimumSize(new Dimension(400, 300));
+        setSize(600,400);
         setLocationRelativeTo(null);
 
-        // Conectar al servidor en segundo plano
+        Consumer<String> onReceive = this::handleMessage;
         new Thread(() -> {
             try {
-                client.connect(data, this::appendMessage);
+                client.connect(data, onReceive);
             } catch (Exception ex) {
                 SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
                         this,
@@ -71,10 +64,9 @@ public class ChatWindow extends JFrame {
             }
         }, "Connector").start();
 
-        // Eventos
-        btnSend.addActionListener((ActionEvent e) -> sendText());
-        tfInput.addActionListener((e) -> sendText());
-        btnFile.addActionListener((ActionEvent e) -> sendFile());
+        btnSend.addActionListener(e -> sendText());
+        tfInput.addActionListener(e -> sendText());
+        btnFile.addActionListener(e -> sendFile());
     }
 
     private void sendText() {
@@ -85,22 +77,105 @@ public class ChatWindow extends JFrame {
         }
     }
 
-    /**
-     * Placeholder para futura logica de envio de archivos.
-     */
     private void sendFile() {
-        JOptionPane.showMessageDialog(
-                this,
-                "Funcionalidad de envio de archivos aun no implementada.",
-                "Info",
-                JOptionPane.INFORMATION_MESSAGE
-        );
+        FileDialog fd = new FileDialog(this, "Seleccionar archivo", FileDialog.LOAD);
+        fd.setFilenameFilter((dir, name) -> true);
+        fd.setVisible(true);
+        String dir = fd.getDirectory();
+        String file = fd.getFile();
+        if (dir != null && file != null) {
+            File f = new File(dir, file);
+            try {
+                byte[] bytes = Files.readAllBytes(f.toPath());
+                String b64 = Base64.getEncoder().encodeToString(bytes);
+                String msg = "FILE:" + f.getName() + ":" + b64;
+                sentFiles.add(msg);
+                client.sendMessage(msg);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this,
+                        "Error leyendo archivo: " + ex.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
     }
 
-    private void appendMessage(String msg) {
+    private void handleMessage(String msg) {
         SwingUtilities.invokeLater(() -> {
-            taChat.append(msg + "\n");
-            taChat.setCaretPosition(taChat.getDocument().getLength());
+            try {
+                StyledDocument doc = tpChat.getStyledDocument();
+                if (msg.startsWith("FILE:")) {
+                    boolean isLocal = sentFiles.remove(msg);
+                    String[] parts = msg.split(":", 3);
+                    if (parts.length != 3) return;
+                    String name = parts[1];
+                    byte[] data = Base64.getDecoder().decode(parts[2]);
+                    BufferedImage img = ImageIO.read(new ByteArrayInputStream(data));
+                    // Salto de linea antes
+                    doc.insertString(doc.getLength(), "\n", null);
+                    tpChat.setCaretPosition(doc.getLength());
+                    if (img != null) {
+                        int max = 100;
+                        int w = img.getWidth(), h = img.getHeight();
+                        double ratio = Math.min((double)max / w, (double)max / h);
+                        int nw = (int)(w * ratio), nh = (int)(h * ratio);
+                        ImageIcon icon = new ImageIcon(img.getScaledInstance(nw, nh, Image.SCALE_SMOOTH));
+                        JLabel imgLabel = new JLabel(icon);
+                        imgLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                        imgLabel.addMouseListener(new java.awt.event.MouseAdapter() {
+                            @Override
+                            public void mouseClicked(java.awt.event.MouseEvent e) {
+                                JFrame frame = new JFrame(name);
+                                frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+                                JLabel fullLabel = new JLabel(new ImageIcon(img));
+                                JScrollPane pane = new JScrollPane(fullLabel);
+                                frame.add(pane, BorderLayout.CENTER);
+                                Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+                                int margin = 50;
+                                frame.setSize(screenSize.width - margin, screenSize.height - margin);
+                                frame.setLocationRelativeTo(null);
+                                frame.setVisible(true);
+                            }
+                        });
+                        tpChat.insertComponent(imgLabel);
+                        doc.insertString(doc.getLength(), "\n", null);
+                        if (!isLocal) {
+                            JButton btn = new JButton("Guardar");
+                            btn.addActionListener(e -> saveImage(name, data));
+                            tpChat.insertComponent(btn);
+                            doc.insertString(doc.getLength(), "\n", null);
+                        }
+                    } else {
+                        doc.insertString(doc.getLength(), "Archivo recibido: " + name + "\n", null);
+                    }
+                } else {
+                    doc.insertString(doc.getLength(), msg + "\n", null);
+                    tpChat.setCaretPosition(doc.getLength());
+                }
+            } catch (BadLocationException | IOException e) {
+                e.printStackTrace();
+            }
         });
+    }
+
+    private void saveImage(String name, byte[] data) {
+        FileDialog fd = new FileDialog(this, "Guardar archivo", FileDialog.SAVE);
+        fd.setFile(name);
+        fd.setVisible(true);
+        String dir = fd.getDirectory();
+        String file = fd.getFile();
+        if (dir != null && file != null) {
+            File outFile = new File(dir, file);
+            try (FileOutputStream fos = new FileOutputStream(outFile)) {
+                fos.write(data);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this,
+                        "Error guardando: " + ex.getMessage(),
+                        "Error",
+                        JOptionPane.ERROR_MESSAGE
+                );
+            }
+        }
     }
 }
