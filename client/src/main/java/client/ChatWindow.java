@@ -2,6 +2,7 @@
 package client;
 
 import javax.swing.*;
+import javax.swing.filechooser.FileSystemView;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.StyledDocument;
 import java.awt.*;
@@ -18,7 +19,8 @@ import java.util.function.Consumer;
 import javax.imageio.ImageIO;
 
 /**
- * ChatWindow con previsualizacion de imagenes recibidas y guardado opcional.
+ * ChatWindow con soporte de texto e intercambio de archivos.
+ * Previsualiza imagenes y muestra iconos para otros tipos.
  */
 public class ChatWindow extends JFrame {
     private final Set<String> sentFiles = new HashSet<>();
@@ -32,7 +34,9 @@ public class ChatWindow extends JFrame {
         super("Chat - " + data.getUsername());
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout(5,5));
-        ((JComponent)getContentPane()).setBorder(BorderFactory.createEmptyBorder(10,10,10,10));
+        ((JComponent)getContentPane()).setBorder(
+                BorderFactory.createEmptyBorder(10,10,10,10)
+        );
 
         tpChat.setEditable(false);
         JScrollPane scroll = new JScrollPane(tpChat);
@@ -47,7 +51,7 @@ public class ChatWindow extends JFrame {
         add(bottom, BorderLayout.SOUTH);
 
         pack();
-        setSize(600,400);
+        setSize(600, 400);
         setLocationRelativeTo(null);
 
         Consumer<String> onReceive = this::handleMessage;
@@ -111,29 +115,40 @@ public class ChatWindow extends JFrame {
                     if (parts.length != 3) return;
                     String name = parts[1];
                     byte[] data = Base64.getDecoder().decode(parts[2]);
-                    BufferedImage img = ImageIO.read(new ByteArrayInputStream(data));
-                    // Salto de linea antes
+
+                    // Salto de linea antes de insertar archivo
                     doc.insertString(doc.getLength(), "\n", null);
                     tpChat.setCaretPosition(doc.getLength());
+
+                    // Intentar cargar como imagen
+                    BufferedImage img = ImageIO.read(new ByteArrayInputStream(data));
                     if (img != null) {
+                        // Previsualizar imagen
                         int max = 100;
                         int w = img.getWidth(), h = img.getHeight();
                         double ratio = Math.min((double)max / w, (double)max / h);
                         int nw = (int)(w * ratio), nh = (int)(h * ratio);
-                        ImageIcon icon = new ImageIcon(img.getScaledInstance(nw, nh, Image.SCALE_SMOOTH));
+                        ImageIcon icon = new ImageIcon(
+                                img.getScaledInstance(nw, nh, Image.SCALE_SMOOTH)
+                        );
                         JLabel imgLabel = new JLabel(icon);
-                        imgLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                        imgLabel.setCursor(
+                                Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                        );
                         imgLabel.addMouseListener(new java.awt.event.MouseAdapter() {
                             @Override
                             public void mouseClicked(java.awt.event.MouseEvent e) {
                                 JFrame frame = new JFrame(name);
                                 frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
-                                JLabel fullLabel = new JLabel(new ImageIcon(img));
-                                JScrollPane pane = new JScrollPane(fullLabel);
+                                JLabel full = new JLabel(new ImageIcon(img));
+                                JScrollPane pane = new JScrollPane(full);
                                 frame.add(pane, BorderLayout.CENTER);
-                                Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
+                                Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
                                 int margin = 50;
-                                frame.setSize(screenSize.width - margin, screenSize.height - margin);
+                                frame.setSize(
+                                        screen.width - margin,
+                                        screen.height - margin
+                                );
                                 frame.setLocationRelativeTo(null);
                                 frame.setVisible(true);
                             }
@@ -147,9 +162,21 @@ public class ChatWindow extends JFrame {
                             doc.insertString(doc.getLength(), "\n", null);
                         }
                     } else {
-                        doc.insertString(doc.getLength(), "Archivo recibido: " + name + "\n", null);
+                        // No es imagen: mostrar icono generico y nombre
+                        Icon fileIcon = UIManager.getIcon("FileView.fileIcon");
+                        JLabel fileLabel = new JLabel(name, fileIcon, JLabel.LEFT);
+                        tpChat.insertComponent(fileLabel);
+                        // salto de linea tras etiqueta
+                        doc.insertString(doc.getLength(), "\n", null);
+                        if (!isLocal) {
+                            JButton btn = new JButton("Guardar");
+                            btn.addActionListener(e -> saveImage(name, data));
+                            tpChat.insertComponent(btn);
+                            doc.insertString(doc.getLength(), "\n", null);
+                        }
                     }
                 } else {
+                    // Texto normal
                     doc.insertString(doc.getLength(), msg + "\n", null);
                     tpChat.setCaretPosition(doc.getLength());
                 }
