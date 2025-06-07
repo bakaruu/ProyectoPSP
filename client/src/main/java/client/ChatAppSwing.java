@@ -8,14 +8,15 @@ import javax.swing.*;
 public class ChatAppSwing {
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
-            LoginDialog login = new LoginDialog(null);
-            LoginData data = login.showDialog();
-            if (data != null) {
-                ChatWindow window = new ChatWindow(data);
+            LoginData login = LoginDialog.showDialog(null);
+            if (login != null) {
+                ChatWindow window = new ChatWindow(login);
                 window.setVisible(true);
             } else {
                 System.exit(0);
             }
+
+
         });
     }
 }
