@@ -42,13 +42,34 @@ public class ChatWindow extends JFrame {
         JScrollPane scroll = new JScrollPane(tpChat);
         add(scroll, BorderLayout.CENTER);
 
+        // Panel inferior: 'Nuevo chat' y 'Enviar archivo' a la izquierda,
+// campo de texto en el centro, y 'Enviar' a la derecha
         JPanel bottom = new JPanel(new BorderLayout(5,5));
         bottom.setBorder(BorderFactory.createEmptyBorder(5,0,0,0));
-        bottom.add(btnFile, BorderLayout.WEST);
+
+// Subpanel west con primero 'Nuevo chat' y luego 'Enviar archivo'
+        JPanel westPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        JButton btnNewChat = new JButton("Nuevo chat");
+        btnNewChat.addActionListener(e -> {
+            LoginData data2 = LoginDialog.showDialog(this);
+            if (data2 != null) {
+                ChatWindow newWin = new ChatWindow(data2);
+                newWin.setVisible(true);
+            }
+        });
+        westPanel.add(btnNewChat);
+        westPanel.add(btnFile);
+        bottom.add(westPanel, BorderLayout.WEST);
+
+// Campo de texto en el centro
         tfInput.setColumns(30);
         bottom.add(tfInput, BorderLayout.CENTER);
+
+// Botón 'Enviar' a la derecha
         bottom.add(btnSend, BorderLayout.EAST);
+
         add(bottom, BorderLayout.SOUTH);
+
 
         pack();
         setSize(600, 400);
