@@ -1,3 +1,4 @@
+// src/main/java/client/ConversationPanel.java
 package client;
 
 import javax.imageio.ImageIO;
@@ -8,17 +9,20 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.Base64;
 
 /**
- * Panel individual de conversacion: texto, archivos e imagenes.
+ * Panel individual de conversación: texto, archivos e imágenes.
+ * Ahora, si falla la conexión, pide al usuario verificar o corregir los datos
+ * usando la caché o reabriendo el diálogo de login.
  */
 public class ConversationPanel extends JPanel {
     private final ConversationLayout layout;
     private final ClientChat client = new ClientChat();
     private final Set<String> sentFiles = new HashSet<>();
-    private final LoginData data;
+    private LoginData data;
     private final Map<String, ImageIcon> avatars = new HashMap<>();
 
     public ConversationPanel(LoginData data) {
@@ -35,8 +39,70 @@ public class ConversationPanel extends JPanel {
             try {
                 client.connect(data, onReceive);
             } catch (IOException ex) {
-                SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(
-                        this, "Error de conexion: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE));
+                // Mostrar opciones Verificar / Cancelar
+                SwingUtilities.invokeLater(() -> {
+                    int choice = JOptionPane.showOptionDialog(
+                            this,
+                            "No se pudo conectar a " + data.getServerIp() + ":" + data.getServerPort()
+                                    + "\nQuieres verificar los datos de conexion?",
+                            "Error de conexion",
+                            JOptionPane.YES_NO_OPTION,
+                            JOptionPane.ERROR_MESSAGE,
+                            null,
+                            new String[]{"Verificar", "Cancelar"},
+                            "Verificar"
+                    );
+
+                    if (choice == JOptionPane.YES_OPTION) {
+                        // Intentar usar una entrada de la caché
+                        List<String[]> cache = CacheManager.load();
+                        String[] options = cache.stream()
+                                .map(arr -> arr[0] + " @ " + arr[1] + ":" + arr[2])
+                                .toArray(String[]::new);
+
+                        String selection = null;
+                        if (options.length > 0) {
+                            selection = (String) JOptionPane.showInputDialog(
+                                    this,
+                                    "Selecciona una entrada guardada o presiona Cancelar para reingresar manualmente:",
+                                    "Cache de conexiones",
+                                    JOptionPane.QUESTION_MESSAGE,
+                                    null,
+                                    options,
+                                    options[0]
+                            );
+                        }
+
+                        if (selection != null) {
+                            // Parsear la selección de la caché
+                            String[] parts = selection.split(" @ ")[1].split(":");
+                            data = new LoginData(
+                                    data.getUsername(),
+                                    data.getAvatar(),
+                                    parts[0],
+                                    Integer.parseInt(parts[1])
+                            );
+                            CacheManager.addAndSave(data.getUsername(), data.getServerIp(), data.getServerPort());
+                            connect();
+                        } else {
+                            // Volver a mostrar diálogo completo de login
+                            LoginData nuevo = LoginDialog.showDialog(
+                                    (Frame) SwingUtilities.getWindowAncestor(this)
+                            );
+                            if (nuevo != null) {
+                                data = nuevo;
+                                CacheManager.addAndSave(
+                                        data.getUsername(),
+                                        data.getServerIp(),
+                                        data.getServerPort()
+                                );
+                                connect();
+                            }
+                            // si el usuario cancela, no reconectamos
+                        }
+                    }
+                    // si eligió "Cancelar" en el primer diálogo, no hacemos nada
+                });
             }
         }, "Connector").start();
     }
@@ -47,8 +113,10 @@ public class ConversationPanel extends JPanel {
     }
 
     public void sendFile() {
-        FileDialog fd = new FileDialog((Frame) SwingUtilities.getWindowAncestor(this),
-                "Seleccionar archivo", FileDialog.LOAD);
+        FileDialog fd = new FileDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this),
+                "Seleccionar archivo", FileDialog.LOAD
+        );
         fd.setVisible(true);
         String dir = fd.getDirectory();
         String file = fd.getFile();
@@ -61,16 +129,21 @@ public class ConversationPanel extends JPanel {
             sentFiles.add(msg);
             client.sendMessage(msg);
         } catch (IOException ex) {
-            JOptionPane.showMessageDialog(this,
-                    "Error leyendo archivo: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(
+                    this,
+                    "Error leyendo archivo: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE
+            );
         }
     }
 
     private void sendAvatar() {
         try {
             Image img = data.getAvatar().getImage();
-            BufferedImage bimg = new BufferedImage(img.getWidth(null), img.getHeight(null),
-                    BufferedImage.TYPE_INT_ARGB);
+            BufferedImage bimg = new BufferedImage(
+                    img.getWidth(null), img.getHeight(null),
+                    BufferedImage.TYPE_INT_ARGB
+            );
             Graphics2D g = bimg.createGraphics();
             g.drawImage(img, 0, 0, null);
             g.dispose();
@@ -91,9 +164,13 @@ public class ConversationPanel extends JPanel {
                     String user = p[1];
                     byte[] imgData = Base64.getDecoder().decode(p[2]);
                     BufferedImage img = ImageIO.read(new ByteArrayInputStream(imgData));
-                    avatars.put(user, new ImageIcon(img.getScaledInstance(40,40,Image.SCALE_SMOOTH)));
+                    avatars.put(
+                            user,
+                            new ImageIcon(img.getScaledInstance(40,40,Image.SCALE_SMOOTH))
+                    );
                     return;
                 }
+
                 if (msg.startsWith("FILE:")) {
                     String[] parts = msg.split(":", 4);
                     if (parts.length != 4) return;
@@ -115,6 +192,7 @@ public class ConversationPanel extends JPanel {
                     }
                     return;
                 }
+
                 int idx = msg.indexOf(": ");
                 if (idx != -1) {
                     String sender = msg.substring(0, idx);
@@ -132,8 +210,10 @@ public class ConversationPanel extends JPanel {
     }
 
     private void saveFile(String name, byte[] bytes) {
-        FileDialog fd = new FileDialog((Frame) SwingUtilities.getWindowAncestor(this),
-                "Guardar archivo", FileDialog.SAVE);
+        FileDialog fd = new FileDialog(
+                (Frame) SwingUtilities.getWindowAncestor(this),
+                "Guardar archivo", FileDialog.SAVE
+        );
         fd.setFile(name);
         fd.setVisible(true);
         String dir = fd.getDirectory();
@@ -142,8 +222,11 @@ public class ConversationPanel extends JPanel {
             try (FileOutputStream fos = new FileOutputStream(new File(dir, file))) {
                 fos.write(bytes);
             } catch (IOException ex) {
-                JOptionPane.showMessageDialog(this,
-                        "Error guardando: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Error guardando: " + ex.getMessage(),
+                        "Error", JOptionPane.ERROR_MESSAGE
+                );
             }
         }
     }
