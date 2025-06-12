@@ -137,7 +137,8 @@ public class ConversationPanel extends JPanel {
                     String sender = msg.substring(0, idx);
                     String body   = msg.substring(idx + 2);
                     ImageIcon icon = avatars.getOrDefault(sender, data.getAvatar());
-                    layout.insertMessage(sender, body, icon);
+                    boolean isOwn = sender.equals(data.getUsername());
+                    layout.insertMessage(sender, body, icon, isOwn);
                 } else {
                     // Mensaje de sistema: "X se ha unido…" o "X ha abandonado…"
                     layout.insertSystemMessage(msg);

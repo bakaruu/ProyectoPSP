@@ -1,6 +1,6 @@
-// src/main/java/client/ConversationLayout.java
 package client;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.StyledDocument;
@@ -12,11 +12,10 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Base64;
-import javax.imageio.ImageIO;
 
 /**
- * Layout y utilidades para insertar texto, imagenes y botones.
+ * Layout y utilidades para insertar texto, imagenes y botones,
+ * con mensajes alineados estilo "WhatsApp" personalizado.
  */
 public class ConversationLayout extends JPanel {
     private final JTextPane tpChat = new JTextPane();
@@ -39,11 +38,12 @@ public class ConversationLayout extends JPanel {
         tpChat.setCaretPosition(doc.getLength());
     }
 
+    // Métodos insertImage e insertFileIcon se mantienen sin cambios.
     public void insertImage(BufferedImage img, String name, byte[] bytes, boolean isLocal) throws BadLocationException {
         int max = 100;
         int w = img.getWidth(), h = img.getHeight();
-        double ratio = Math.min((double)max / w, (double)max / h);
-        int nw = (int)(w * ratio), nh = (int)(h * ratio);
+        double ratio = Math.min((double) max / w, (double) max / h);
+        int nw = (int) (w * ratio), nh = (int) (h * ratio);
         ImageIcon icon = new ImageIcon(img.getScaledInstance(nw, nh, Image.SCALE_SMOOTH));
         JLabel lbl = new JLabel(icon);
         lbl.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -54,7 +54,7 @@ public class ConversationLayout extends JPanel {
                 fr.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
                 fr.add(new JScrollPane(new JLabel(new ImageIcon(img))), BorderLayout.CENTER);
                 Dimension sc = Toolkit.getDefaultToolkit().getScreenSize();
-                fr.setSize(sc.width-50, sc.height-50);
+                fr.setSize(sc.width - 50, sc.height - 50);
                 fr.setLocationRelativeTo(null);
                 fr.setVisible(true);
             }
@@ -83,13 +83,13 @@ public class ConversationLayout extends JPanel {
     }
 
     private void saveFile(String name, byte[] data) {
-        FileDialog fd = new FileDialog((Frame)SwingUtilities.getWindowAncestor(this), "Guardar archivo", FileDialog.SAVE);
+        FileDialog fd = new FileDialog((Frame) SwingUtilities.getWindowAncestor(this), "Guardar archivo", FileDialog.SAVE);
         fd.setFile(name);
         fd.setVisible(true);
         String dir = fd.getDirectory();
         String file = fd.getFile();
         if (dir != null && file != null) {
-            try (FileOutputStream fos = new FileOutputStream(new File(dir,file))) {
+            try (FileOutputStream fos = new FileOutputStream(new File(dir, file))) {
                 fos.write(data);
             } catch (IOException ex) {
                 JOptionPane.showMessageDialog(this, "Error guardando: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -97,12 +97,47 @@ public class ConversationLayout extends JPanel {
         }
     }
 
-    // En ConversationLayout.java
-    public void insertMessage(String user, String text, ImageIcon avatar) throws BadLocationException {
-        JPanel line = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
-        line.add(new JLabel(avatar));
-        line.add(new JLabel("<html><b>" + user + ":</b> " + text + "</html>"));
-        tpChat.insertComponent(line);
+    /**
+     * Inserta un mensaje de texto con avatar, alineado y coloreado según quien lo envía.
+     *
+     * @param user   El nick de quien envía.
+     * @param text   El contenido.
+     * @param avatar Su avatar en ImageIcon.
+     * @param isOwn  true si user.equals(data.getUsername()).
+     */
+    public void insertMessage(String user, String text, ImageIcon avatar, boolean isOwn) throws BadLocationException {
+        JPanel bubble = new JPanel(new BorderLayout(5, 0));
+        bubble.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+
+        // FONDO: entrantes verdes, propios grises
+        Color bg = isOwn ? new Color(240, 240, 240) : new Color(220, 248, 198);
+        bubble.setBackground(bg);
+
+        // Etiqueta de texto: si es propio, solo el texto y alineado a la derecha
+        JLabel lbl;
+        if (isOwn) {
+            lbl = new JLabel(text);
+            lbl.setHorizontalAlignment(SwingConstants.RIGHT);
+        } else {
+            lbl = new JLabel("<html><b>" + user + ":</b> " + text + "</html>");
+            lbl.setHorizontalAlignment(SwingConstants.LEFT);
+        }
+        lbl.setOpaque(false);
+
+        JLabel pic = new JLabel(avatar);
+        pic.setOpaque(false);
+
+        if (isOwn) {
+            // Mensaje propio: texto a la izquierda, avatar a la derecha
+            bubble.add(lbl, BorderLayout.CENTER);
+            bubble.add(pic, BorderLayout.EAST);
+        } else {
+            // Mensaje entrante: avatar a la izquierda, texto a la derecha
+            bubble.add(pic, BorderLayout.WEST);
+            bubble.add(lbl, BorderLayout.CENTER);
+        }
+
+        tpChat.insertComponent(bubble);
         doc.insertString(doc.getLength(), "\n", null);
         insertCaret();
     }
@@ -114,6 +149,4 @@ public class ConversationLayout extends JPanel {
         doc.insertString(doc.getLength(), "[ " + msg + " ]\n", null);
         insertCaret();
     }
-
-
 }
