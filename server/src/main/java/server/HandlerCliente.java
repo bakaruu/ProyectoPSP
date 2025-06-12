@@ -7,7 +7,7 @@ import java.util.Base64;
 
 /**
  * Maneja cliente en servidor: texto, archivo y avatar.
- * Ahora emite enviando… solo al emisor y recibiendo… al resto.
+ * Ahora notifica cada trozo a emisor y receptores.
  */
 public class HandlerCliente implements Runnable {
     private Socket socket;
@@ -16,7 +16,7 @@ public class HandlerCliente implements Runnable {
     private PrintWriter out;
     private String nombre;
 
-    // Acumulador de trozos entrantes: clave "usuario:filename"
+    // Acumulador de trozos: clave "usuario:filename"
     private final Map<String, List<byte[]>> incomingChunks = new HashMap<>();
 
     public HandlerCliente(Socket socket, ChatServer server) {
@@ -38,8 +38,9 @@ public class HandlerCliente implements Runnable {
 
             String line;
             while ((line = in.readLine()) != null) {
+                // ——— Procesamos chunks ► envío trozo a trozo ———
                 if (line.startsWith("CHUNK:")) {
-                    // Formato: CHUNK:usuario:filename:idx:total:b64chunk
+                    // Parseo de los campos
                     String[] p = line.split(":", 6);
                     String user     = p[1];
                     String filename = p[2];
@@ -48,7 +49,7 @@ public class HandlerCliente implements Runnable {
                     byte[] data     = Base64.getDecoder().decode(p[5]);
 
                     String key = user + ":" + filename;
-                    // guardamos el chunk en su posición
+                    // guardamos el trozo
                     incomingChunks
                             .computeIfAbsent(key, k ->
                                     new ArrayList<>(Collections.nCopies(total, null)))
@@ -57,50 +58,41 @@ public class HandlerCliente implements Runnable {
                     List<byte[]> parts = incomingChunks.get(key);
 
                     if (total > 1) {
-                        // --- Mensajes de progreso al propio emisor ---
-                        if (idx == 0) {
-                            this.send("[Sistema] Iniciando troceado de \"" +
-                                    filename + "\" en " + total + " trozos");
-                        }
-                        if (!parts.contains(null)) {
-                            this.send("[Sistema] Completados los " + total +
-                                    " trozos de \"" + filename + "\"" +
-                                    "\nReconstruyendo y enviando archivo...");
-                        }
+                        // 1) Al emisor: notificamos cada trozo enviado
+                        this.send(String.format(
+                                "[Sistema] Trozo %d/%d enviado (%d bytes)",
+                                idx+1, total, data.length));
 
-                        // --- Mensajes de progreso al resto de clientes ---
-                        if (idx == 0) {
-                            server.broadcastExcept(
-                                    "[Sistema] Preparando recepción de \"" +
-                                            filename + "\" en " + total + " trozos",
-                                    this
-                            );
-                        }
-                        if (!parts.contains(null)) {
-                            server.broadcastExcept(
-                                    "[Sistema] Recibidos los " + total +
-                                            " trozos de \"" + filename + "\"" +
-                                            "\nReconstruyendo y mostrando archivo...",
-                                    this
-                            );
-                        }
+                        // 2) Al resto: notificamos cada trozo recibido
+                        server.broadcastExcept(
+                                String.format("[Sistema] Trozo %d/%d recibido", idx+1, total),
+                                this
+                        );
                     }
 
-                    // Cuando ya tenemos todos los trozos:
+                    // Si ya recibimos todos, reensamblamos
                     if (!parts.contains(null)) {
                         ByteArrayOutputStream baos = new ByteArrayOutputStream();
                         for (byte[] part : parts) baos.write(part);
                         byte[] full = baos.toByteArray();
                         incomingChunks.remove(key);
 
+                        // Avisos de reconstrucción
+                        if (total > 1) {
+                            this.send("[Sistema] Hecho");
+                            server.broadcastExcept(
+                                    "[Sistema] Reconstruyendo y mostrando archivo...",
+                                    this
+                            );
+                        }
+
+                        // Envío final del FILE completo
                         String b64full = Base64.getEncoder().encodeToString(full);
-                        // Enviamos el archivo completo a todos
                         server.broadcast("FILE:" + user + ":" + filename + ":" + b64full);
 
+                        // Mensajes de cierre
                         if (total > 1) {
-                            // Aviso de finalización al emisor
-                            this.send("[Sistema] Envío de \"" + filename + "\" completado");
-                            // Aviso de recepción al resto
+                            this.send("[Sistema] Envio de \"" + filename + "\" completado");
                             server.broadcastExcept(
                                     "[Sistema] Archivo \"" + filename + "\" recibido correctamente",
                                     this
@@ -108,17 +100,17 @@ public class HandlerCliente implements Runnable {
                         }
                     }
 
-                } else if (line.startsWith("FILE:") || line.startsWith("AVATAR:")) {
-                    // reenvío directo (archivos pequeños y avatares)
-                    server.broadcast(line);
+                    continue;  // saltamos las demás ramas
+                }
 
+                // ——— Resto de casos ———
+                if (line.startsWith("FILE:") || line.startsWith("AVATAR:")) {
+                    server.broadcast(line);
                 } else {
-                    // texto normal
                     server.broadcast(nombre + ": " + line);
                 }
             }
         } catch (IOException ignored) {
-            // cliente desconectado
         } finally {
             server.removeClient(this);
             server.broadcast(nombre + " ha abandonado el chat");
