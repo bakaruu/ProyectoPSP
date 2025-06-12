@@ -1,7 +1,11 @@
 package client;
 
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.Socket;
+import java.util.Base64;
 import java.util.function.Consumer;
 
 /**
@@ -22,6 +26,24 @@ public class ClientChat {
 
         // enviamos nombre
         out.println(data.getUsername());
+
+        // Sustituye EL CAST que daba error por este bloque:
+        // -------------------------------------------------
+        // Convierte el ImageIcon en BufferedImage
+        Image img = data.getAvatar().getImage();
+        int w = img.getWidth(null), h = img.getHeight(null);
+        BufferedImage bimg = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = bimg.createGraphics();
+        g.drawImage(img, 0, 0, null);
+        g.dispose();
+
+        // Codifica a Base64 y envía AVATAR:username:...
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ImageIO.write(bimg, "png", baos);
+        String b64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+        out.println("AVATAR:" + data.getUsername() + ":" + b64);
+        // -------------------------------------------------
+        // ────────────────────────────────────────────
 
         // hilo de lectura
         new Thread(() -> {

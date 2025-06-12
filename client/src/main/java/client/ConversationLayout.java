@@ -96,4 +96,24 @@ public class ConversationLayout extends JPanel {
             }
         }
     }
+
+    // En ConversationLayout.java
+    public void insertMessage(String user, String text, ImageIcon avatar) throws BadLocationException {
+        JPanel line = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
+        line.add(new JLabel(avatar));
+        line.add(new JLabel("<html><b>" + user + ":</b> " + text + "</html>"));
+        tpChat.insertComponent(line);
+        doc.insertString(doc.getLength(), "\n", null);
+        insertCaret();
+    }
+
+    /**
+     * Inserta mensaje de sistema (sin avatar).
+     */
+    public void insertSystemMessage(String msg) throws BadLocationException {
+        doc.insertString(doc.getLength(), "[ " + msg + " ]\n", null);
+        insertCaret();
+    }
+
+
 }

@@ -5,7 +5,7 @@ import java.io.*;
 import java.net.Socket;
 
 /**
- * Maneja cliente en servidor: texto y archivo en Base64.
+ * Maneja cliente en servidor: texto, archivo y avatar en Base64.
  */
 public class HandlerCliente implements Runnable {
     private Socket socket;
@@ -34,11 +34,11 @@ public class HandlerCliente implements Runnable {
 
             String line;
             while ((line = in.readLine()) != null) {
-                if (line.startsWith("FILE:")) {
-                    // reenviar exactamente la linea de archivo
+                if (line.startsWith("FILE:") || line.startsWith("AVATAR:")) {
+                    // reenviar la línea cruda (archivo o avatar)
                     server.broadcast(line);
                 } else {
-                    // mensaje de texto normal
+                    // mensaje de texto normal: prefijar nick
                     server.broadcast(nombre + ": " + line);
                 }
             }
@@ -51,7 +51,7 @@ public class HandlerCliente implements Runnable {
         }
     }
 
-    /** Recibe una linea (texto o FILE:...) para enviar al cliente */
+    /** Envía un mensaje a este cliente */
     public void send(String msg) {
         out.println(msg);
     }

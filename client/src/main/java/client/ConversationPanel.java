@@ -8,14 +8,9 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
-import java.util.Base64;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Consumer;
 import javax.imageio.ImageIO;
 
@@ -27,6 +22,9 @@ public class ConversationPanel extends JPanel {
     private final ClientChat client = new ClientChat();
     private final Set<String> sentFiles = new HashSet<>();
     private final LoginData data;
+
+    private final Map<String, ImageIcon> avatars = new HashMap<>();
+
 
     public ConversationPanel(LoginData data) {
         super(new BorderLayout(5,5));
@@ -50,8 +48,28 @@ public class ConversationPanel extends JPanel {
 
     // Invocado desde ChatWindow cuando pulsas Enviar en esta pestaña
     public void sendText(String text) {
+        // 1) Manda el avatar
+        try {
+            // Convierte tu ImageIcon a BufferedImage
+            Image img = data.getAvatar().getImage();
+            BufferedImage bimg = new BufferedImage(img.getWidth(null), img.getHeight(null),
+                    BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = bimg.createGraphics();
+            g.drawImage(img, 0, 0, null);
+            g.dispose();
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(bimg, "png", baos);
+            String b64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+            client.sendMessage("AVATAR:" + data.getUsername() + ":" + b64);
+        } catch (IOException ex) {
+            ex.printStackTrace();
+        }
+
+        // 2) Manda el texto
         client.sendMessage(text);
     }
+
 
     public void sendFile() {
         FileDialog fd = new FileDialog(
@@ -79,9 +97,24 @@ public class ConversationPanel extends JPanel {
         SwingUtilities.invokeLater(() -> {
             try {
                 StyledDocument doc = layout.getDocument();
+
+                // 1) AVATAR:usuario:BASE64 → guardamos y salimos
+                if (msg.startsWith("AVATAR:")) {
+                    String[] p = msg.split(":", 3);
+                    String user = p[1];
+                    byte[] imgData = Base64.getDecoder().decode(p[2]);
+                    BufferedImage img = ImageIO.read(new ByteArrayInputStream(imgData));
+                    ImageIcon icon = new ImageIcon(
+                            img.getScaledInstance(40, 40, Image.SCALE_SMOOTH)
+                    );
+                    avatars.put(user, icon);
+                    return;
+                }
+
+                // 2) FILE:… → manejo de archivos/img locales y remotos
                 if (msg.startsWith("FILE:")) {
                     boolean isLocal = sentFiles.remove(msg);
-                    String[] parts = msg.split(":",3);
+                    String[] parts = msg.split(":", 3);
                     if (parts.length != 3) return;
                     String name = parts[1];
                     byte[] data = Base64.getDecoder().decode(parts[2]);
@@ -94,10 +127,22 @@ public class ConversationPanel extends JPanel {
                     } else {
                         layout.insertFileIcon(name, data, isLocal);
                     }
-                } else {
-                    doc.insertString(doc.getLength(), msg + "\n", null);
-                    layout.insertCaret();
+                    return;
                 }
+
+                // 3) Texto normal o mensaje de sistema
+                int idx = msg.indexOf(": ");
+                if (idx != -1) {
+                    // Mensaje de usuario: "usuario: texto…"
+                    String sender = msg.substring(0, idx);
+                    String body   = msg.substring(idx + 2);
+                    ImageIcon icon = avatars.getOrDefault(sender, data.getAvatar());
+                    layout.insertMessage(sender, body, icon);
+                } else {
+                    // Mensaje de sistema: "X se ha unido…" o "X ha abandonado…"
+                    layout.insertSystemMessage(msg);
+                }
+
             } catch (BadLocationException | IOException e) {
                 e.printStackTrace();
             }
