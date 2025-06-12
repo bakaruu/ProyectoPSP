@@ -3,7 +3,7 @@
 Este proyecto implementa un chat cliente-servidor...
 
 
-# README: Compatibilidad Multiplataforma de ChatApp
+## Compatibilidad Multiplataforma de ChatApp
 
 ## Descripción General
 
