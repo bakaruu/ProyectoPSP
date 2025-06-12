@@ -1,3 +1,4 @@
+// src/main/java/client/ClientChat.java
 package client;
 
 import javax.imageio.ImageIO;
@@ -5,20 +6,22 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.Socket;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.function.Consumer;
 
 /**
  * Lógica de chat: conecta al servidor, envía/recibe líneas de texto.
+ * Ahora sólo trocea cuando realmente hay >1 trozo.
  */
 public class ClientChat {
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
 
-    /**
-     * Abre la conexión y manda el nombre como primer mensaje.
-     */
+    // Tamaño máximo de cada trozo: 64 KB
+    private static final int MAX_CHUNK = 64 * 1024;
+
     public void connect(LoginData data, Consumer<String> onReceive) throws IOException {
         socket = new Socket(data.getServerIp(), data.getServerPort());
         in  = new BufferedReader(new InputStreamReader(socket.getInputStream()));
@@ -27,23 +30,17 @@ public class ClientChat {
         // enviamos nombre
         out.println(data.getUsername());
 
-        // Sustituye EL CAST que daba error por este bloque:
-        // -------------------------------------------------
-        // Convierte el ImageIcon en BufferedImage
+        // convertimos y enviamos AVATAR:
         Image img = data.getAvatar().getImage();
-        int w = img.getWidth(null), h = img.getHeight(null);
-        BufferedImage bimg = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        BufferedImage bimg = new BufferedImage(img.getWidth(null), img.getHeight(null),
+                BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = bimg.createGraphics();
         g.drawImage(img, 0, 0, null);
         g.dispose();
-
-        // Codifica a Base64 y envía AVATAR:username:...
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         ImageIO.write(bimg, "png", baos);
-        String b64 = Base64.getEncoder().encodeToString(baos.toByteArray());
-        out.println("AVATAR:" + data.getUsername() + ":" + b64);
-        // -------------------------------------------------
-        // ────────────────────────────────────────────
+        String b64avatar = Base64.getEncoder().encodeToString(baos.toByteArray());
+        out.println("AVATAR:" + data.getUsername() + ":" + b64avatar);
 
         // hilo de lectura
         new Thread(() -> {
@@ -56,13 +53,51 @@ public class ClientChat {
         }, "ClientReader").start();
     }
 
-    /** Envía un mensaje de texto al servidor. */
+    /**
+     * Envía un mensaje. Si es FILE:… y hay más de un trozo, lo trocea;
+     * si solo hay un trozo, deja que llegue como FILE:… original.
+     */
     public void sendMessage(String msg) {
-        if (out != null) out.println(msg);
+        if (out == null) return;
+
+        try {
+            if (msg.startsWith("FILE:")) {
+                // original: FILE:usuario:filename:base64data
+                String[] parts = msg.split(":", 4);
+                String user     = parts[1];
+                String filename = parts[2];
+                byte[] full     = Base64.getDecoder().decode(parts[3]);
+
+                int totalChunks = (full.length + MAX_CHUNK - 1) / MAX_CHUNK;
+                if (totalChunks <= 1) {
+                    // un solo trozo: lo mando sin tocar
+                    out.println(msg);
+                    return;
+                }
+
+                // más de un trozo: lo partimos
+                for (int i = 0; i < totalChunks; i++) {
+                    int start = i * MAX_CHUNK;
+                    int end   = Math.min(full.length, start + MAX_CHUNK);
+                    byte[] chunk = Arrays.copyOfRange(full, start, end);
+                    String b64chunk = Base64.getEncoder().encodeToString(chunk);
+                    out.println(String.format(
+                            "CHUNK:%s:%s:%d:%d:%s",
+                            user, filename, i, totalChunks, b64chunk
+                    ));
+                }
+            } else {
+                // texto, avatar…
+                out.println(msg);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
-    /** Cierra la conexión. */
     public void disconnect() {
-        try { if (socket != null) socket.close(); } catch (IOException ignored) {}
+        try {
+            if (socket != null) socket.close();
+        } catch (IOException ignored) {}
     }
 }

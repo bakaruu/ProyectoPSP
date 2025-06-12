@@ -15,7 +15,7 @@ public class ChatWindow extends JFrame {
     private final JButton btnSend  = new JButton("Enviar");
 
     public ChatWindow() {
-        super("Chat Multisesión");
+        super("Chat Multisesion");
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout(5,5));
         ((JComponent)getContentPane()).setBorder(
@@ -39,7 +39,7 @@ public class ChatWindow extends JFrame {
         south.add(btnSend, BorderLayout.EAST);
         add(south, BorderLayout.SOUTH);
 
-        setSize(800,600);
+        setSize(650,400);
         setLocationRelativeTo(null);
 
         // Listeners
