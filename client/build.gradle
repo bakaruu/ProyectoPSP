@@ -6,5 +6,6 @@ dependencies {
 }
 
 application {
-    mainClass = 'client.ChatAppSwing'    // la crearemos después
+    mainClass = 'client.ChatWindow'
 }
+

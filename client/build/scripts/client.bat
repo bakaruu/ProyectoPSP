@@ -72,7 +72,7 @@ set CLASSPATH=%APP_HOME%\lib\client.jar;%APP_HOME%\lib\server.jar;%APP_HOME%\lib
 
 
 @rem Execute client
-"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %CLIENT_OPTS%  -classpath "%CLASSPATH%" client.ChatAppSwing %*
+"%JAVA_EXE%" %DEFAULT_JVM_OPTS% %JAVA_OPTS% %CLIENT_OPTS%  -classpath "%CLASSPATH%" client.ChatWindow %*
 
 :end
 @rem End local scope for the variables with windows NT shell
