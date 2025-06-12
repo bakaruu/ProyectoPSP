@@ -72,16 +72,10 @@ public class ConversationLayout extends JPanel {
         btn.setOpaque(false);
         btn.addActionListener(e -> saveFile(name, bytes));
 
-        // Alinear icono y botón según isOwn, invirtiendo orden para propios
         JPanel content = new JPanel(new FlowLayout(isOwn ? FlowLayout.RIGHT : FlowLayout.LEFT, 5, 0));
         content.setOpaque(false);
-        if (isOwn) {
-            content.add(btn);
-            content.add(pic);
-        } else {
-            content.add(pic);
-            content.add(btn);
-        }
+        content.add(pic);
+        if (!isOwn) content.add(btn);
 
         JPanel bubble = createBubble(isOwn);
         if (isOwn) bubble.add(new JLabel(avatar), BorderLayout.EAST);
@@ -97,16 +91,10 @@ public class ConversationLayout extends JPanel {
         btn.setOpaque(false);
         btn.addActionListener(e -> saveFile(filename, bytes));
 
-        // Alinear icono y botón según isOwn, invirtiendo orden para propios
         JPanel content = new JPanel(new FlowLayout(isOwn ? FlowLayout.RIGHT : FlowLayout.LEFT, 5, 0));
         content.setOpaque(false);
-        if (isOwn) {
-            content.add(btn);
-            content.add(fileIcon);
-        } else {
-            content.add(fileIcon);
-            content.add(btn);
-        }
+        content.add(fileIcon);
+        if (!isOwn) content.add(btn);
 
         JPanel bubble = createBubble(isOwn);
         if (isOwn) bubble.add(new JLabel(avatar), BorderLayout.EAST);
