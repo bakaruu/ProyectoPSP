@@ -71,7 +71,11 @@ public class ChatWindow extends JFrame {
         btnClose.setBorder(null);
         btnClose.setFocusable(false);
         btnClose.setContentAreaFilled(false);
-        btnClose.addActionListener(e -> tabs.remove(conv));
+        btnClose.addActionListener(e -> {
+            conv.disconnect();      // <-- Avisa al servidor que cierras
+            tabs.remove(conv);      // <-- Quita la pestaña de la UI
+        });
+
         tabHeader.add(btnClose);
 
         tabs.setTabComponentAt(index, tabHeader);

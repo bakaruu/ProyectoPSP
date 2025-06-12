@@ -252,4 +252,9 @@ public class ConversationPanel extends JPanel {
             }
         }
     }
+    /** Cierra el socket y notifica al servidor la desconexión */
+    public void disconnect() {
+        client.disconnect();
+    }
+
 }
