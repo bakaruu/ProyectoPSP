@@ -2,24 +2,10 @@ package client;
 
 import javax.swing.*;
 import java.awt.*;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.util.Base64;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.function.Consumer;
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import javax.swing.text.BadLocationException;
-import javax.swing.text.StyledDocument;
-import java.io.ByteArrayInputStream;
+import java.awt.event.*;
 
 /**
- * ChatWindow que gestiona múltiples conversaciones en pestañas.
+ * ChatWindow que gestiona múltiples conversaciones en pestañas con cierre.
  */
 public class ChatWindow extends JFrame {
     private final JTabbedPane tabs = new JTabbedPane();
@@ -63,10 +49,32 @@ public class ChatWindow extends JFrame {
         tfInput.addActionListener(e -> sendTextCurrent());
     }
 
-    /** Añade una nueva pestaña de chat usando los datos proporcionados */
+    /**
+     * Añade una nueva pestaña de chat usando los datos proporcionados,
+     * con un botón X para cerrarla.
+     */
     public void addChat(LoginData data) {
         ConversationPanel conv = new ConversationPanel(data);
+        // Añadimos la pestaña y configuramos el header con cierre
         tabs.addTab(data.getUsername(), conv);
+        int index = tabs.indexOfComponent(conv);
+
+        // Header personalizado
+        JPanel tabHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        tabHeader.setOpaque(false);
+        JLabel lblTitle = new JLabel(" " + data.getUsername() + " ");
+        tabHeader.add(lblTitle);
+
+        JButton btnClose = new JButton(" X");
+        btnClose.setFont(btnClose.getFont().deriveFont(Font.PLAIN, 10f));
+        btnClose.setMargin(new Insets(0, 4, 0, 4));
+        btnClose.setBorder(null);
+        btnClose.setFocusable(false);
+        btnClose.setContentAreaFilled(false);
+        btnClose.addActionListener(e -> tabs.remove(conv));
+        tabHeader.add(btnClose);
+
+        tabs.setTabComponentAt(index, tabHeader);
         tabs.setSelectedComponent(conv);
     }
 
@@ -101,7 +109,6 @@ public class ChatWindow extends JFrame {
             // 1) Pedimos login antes de todo
             LoginData data = LoginDialog.showDialog(null);
             if (data == null) {
-                // Si cancela o cierra, salimos sin mostrar nada
                 System.exit(0);
             }
             // 2) Creamos la ventana y la primera pestaña
