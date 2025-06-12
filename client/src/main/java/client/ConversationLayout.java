@@ -12,9 +12,10 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Base64;
 
 /**
- * Layout y utilidades para insertar texto, imagenes y botones,
+ * Layout y utilidades para insertar texto, imágenes y archivos,
  * con mensajes alineados estilo "WhatsApp" personalizado.
  */
 public class ConversationLayout extends JPanel {
@@ -38,16 +39,24 @@ public class ConversationLayout extends JPanel {
         tpChat.setCaretPosition(doc.getLength());
     }
 
-    // Métodos insertImage e insertFileIcon se mantienen sin cambios.
-    public void insertImage(BufferedImage img, String name, byte[] bytes, boolean isLocal) throws BadLocationException {
+    public void insertMessage(String user, String text, ImageIcon avatar, boolean isOwn) throws BadLocationException {
+        JPanel bubble = createBubble(isOwn);
+        JLabel lbl = new JLabel(isOwn ? text : "<html><b>" + user + ":</b> " + text + "</html>");
+        lbl.setHorizontalAlignment(isOwn ? SwingConstants.RIGHT : SwingConstants.LEFT);
+        lbl.setOpaque(false);
+        bubble.add(lbl, BorderLayout.CENTER);
+        bubble.add(new JLabel(avatar), isOwn ? BorderLayout.EAST : BorderLayout.WEST);
+        commitComponent(bubble);
+    }
+
+    public void insertImageMessage(String user, BufferedImage img, String name, byte[] bytes, ImageIcon avatar, boolean isOwn) throws BadLocationException {
         int max = 100;
         int w = img.getWidth(), h = img.getHeight();
         double ratio = Math.min((double) max / w, (double) max / h);
-        int nw = (int) (w * ratio), nh = (int) (h * ratio);
-        ImageIcon icon = new ImageIcon(img.getScaledInstance(nw, nh, Image.SCALE_SMOOTH));
-        JLabel lbl = new JLabel(icon);
-        lbl.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        lbl.addMouseListener(new MouseAdapter() {
+        ImageIcon thumb = new ImageIcon(img.getScaledInstance((int) (w * ratio), (int) (h * ratio), Image.SCALE_SMOOTH));
+        JLabel pic = new JLabel(thumb);
+        pic.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        pic.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 JFrame fr = new JFrame(name);
@@ -59,27 +68,70 @@ public class ConversationLayout extends JPanel {
                 fr.setVisible(true);
             }
         });
-        tpChat.insertComponent(lbl);
-        doc.insertString(doc.getLength(), "\n", null);
-        if (!isLocal) {
-            JButton btn = new JButton("Guardar");
-            btn.addActionListener(e -> saveFile(name, bytes));
-            tpChat.insertComponent(btn);
-            doc.insertString(doc.getLength(), "\n", null);
+        JButton btn = new JButton("Guardar");
+        btn.setOpaque(false);
+        btn.addActionListener(e -> saveFile(name, bytes));
+
+        // Alinear icono y botón según isOwn, invirtiendo orden para propios
+        JPanel content = new JPanel(new FlowLayout(isOwn ? FlowLayout.RIGHT : FlowLayout.LEFT, 5, 0));
+        content.setOpaque(false);
+        if (isOwn) {
+            content.add(btn);
+            content.add(pic);
+        } else {
+            content.add(pic);
+            content.add(btn);
         }
+
+        JPanel bubble = createBubble(isOwn);
+        if (isOwn) bubble.add(new JLabel(avatar), BorderLayout.EAST);
+        bubble.add(content, BorderLayout.CENTER);
+        if (!isOwn) bubble.add(new JLabel(avatar), BorderLayout.WEST);
+        commitComponent(bubble);
     }
 
-    public void insertFileIcon(String name, byte[] bytes, boolean isLocal) throws BadLocationException {
-        Icon icon = UIManager.getIcon("FileView.fileIcon");
-        JLabel lbl = new JLabel(name, icon, JLabel.LEFT);
-        tpChat.insertComponent(lbl);
-        doc.insertString(doc.getLength(), "\n", null);
-        if (!isLocal) {
-            JButton btn = new JButton("Guardar");
-            btn.addActionListener(e -> saveFile(name, bytes));
-            tpChat.insertComponent(btn);
-            doc.insertString(doc.getLength(), "\n", null);
+    public void insertFileMessage(String user, String filename, byte[] bytes, ImageIcon avatar, boolean isOwn) throws BadLocationException {
+        JLabel fileIcon = new JLabel(filename, UIManager.getIcon("FileView.fileIcon"), JLabel.LEFT);
+        fileIcon.setOpaque(false);
+        JButton btn = new JButton("Guardar");
+        btn.setOpaque(false);
+        btn.addActionListener(e -> saveFile(filename, bytes));
+
+        // Alinear icono y botón según isOwn, invirtiendo orden para propios
+        JPanel content = new JPanel(new FlowLayout(isOwn ? FlowLayout.RIGHT : FlowLayout.LEFT, 5, 0));
+        content.setOpaque(false);
+        if (isOwn) {
+            content.add(btn);
+            content.add(fileIcon);
+        } else {
+            content.add(fileIcon);
+            content.add(btn);
         }
+
+        JPanel bubble = createBubble(isOwn);
+        if (isOwn) bubble.add(new JLabel(avatar), BorderLayout.EAST);
+        bubble.add(content, BorderLayout.CENTER);
+        if (!isOwn) bubble.add(new JLabel(avatar), BorderLayout.WEST);
+        commitComponent(bubble);
+    }
+
+    public void insertSystemMessage(String msg) throws BadLocationException {
+        doc.insertString(doc.getLength(), "[ " + msg + " ]\n", null);
+        insertCaret();
+    }
+
+    private JPanel createBubble(boolean isOwn) {
+        JPanel bubble = new JPanel(new BorderLayout(5, 0));
+        bubble.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        bubble.setBackground(isOwn ? new Color(240, 240, 240) : new Color(220, 248, 198));
+        bubble.setOpaque(true);
+        return bubble;
+    }
+
+    private void commitComponent(JComponent comp) throws BadLocationException {
+        tpChat.insertComponent(comp);
+        doc.insertString(doc.getLength(), "\n", null);
+        insertCaret();
     }
 
     private void saveFile(String name, byte[] data) {
@@ -95,58 +147,5 @@ public class ConversationLayout extends JPanel {
                 JOptionPane.showMessageDialog(this, "Error guardando: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
             }
         }
-    }
-
-    /**
-     * Inserta un mensaje de texto con avatar, alineado y coloreado según quien lo envía.
-     *
-     * @param user   El nick de quien envía.
-     * @param text   El contenido.
-     * @param avatar Su avatar en ImageIcon.
-     * @param isOwn  true si user.equals(data.getUsername()).
-     */
-    public void insertMessage(String user, String text, ImageIcon avatar, boolean isOwn) throws BadLocationException {
-        JPanel bubble = new JPanel(new BorderLayout(5, 0));
-        bubble.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
-
-        // FONDO: entrantes verdes, propios grises
-        Color bg = isOwn ? new Color(240, 240, 240) : new Color(220, 248, 198);
-        bubble.setBackground(bg);
-
-        // Etiqueta de texto: si es propio, solo el texto y alineado a la derecha
-        JLabel lbl;
-        if (isOwn) {
-            lbl = new JLabel(text);
-            lbl.setHorizontalAlignment(SwingConstants.RIGHT);
-        } else {
-            lbl = new JLabel("<html><b>" + user + ":</b> " + text + "</html>");
-            lbl.setHorizontalAlignment(SwingConstants.LEFT);
-        }
-        lbl.setOpaque(false);
-
-        JLabel pic = new JLabel(avatar);
-        pic.setOpaque(false);
-
-        if (isOwn) {
-            // Mensaje propio: texto a la izquierda, avatar a la derecha
-            bubble.add(lbl, BorderLayout.CENTER);
-            bubble.add(pic, BorderLayout.EAST);
-        } else {
-            // Mensaje entrante: avatar a la izquierda, texto a la derecha
-            bubble.add(pic, BorderLayout.WEST);
-            bubble.add(lbl, BorderLayout.CENTER);
-        }
-
-        tpChat.insertComponent(bubble);
-        doc.insertString(doc.getLength(), "\n", null);
-        insertCaret();
-    }
-
-    /**
-     * Inserta mensaje de sistema (sin avatar).
-     */
-    public void insertSystemMessage(String msg) throws BadLocationException {
-        doc.insertString(doc.getLength(), "[ " + msg + " ]\n", null);
-        insertCaret();
     }
 }
