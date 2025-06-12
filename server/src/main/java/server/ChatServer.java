@@ -32,11 +32,24 @@ public class ChatServer {
         }
     }
 
-    /** Envía un mensaje a todos (excepto el remitente). */
+    /** Envía un mensaje a todos los clientes. */
     public void broadcast(String message) {
         synchronized (clients) {
             for (HandlerCliente client : clients) {
                 client.send(message);
+            }
+        }
+    }
+
+    /**
+     * Envía un mensaje a todos menos al cliente ‘exclude’.
+     */
+    public void broadcastExcept(String message, HandlerCliente exclude) {
+        synchronized (clients) {
+            for (HandlerCliente client : clients) {
+                if (client != exclude) {
+                    client.send(message);
+                }
             }
         }
     }

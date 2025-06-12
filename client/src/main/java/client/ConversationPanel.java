@@ -21,6 +21,7 @@ import java.util.Base64;
 public class ConversationPanel extends JPanel {
     private final ConversationLayout layout;
     private final ClientChat client = new ClientChat();
+    /** Mensajes FILE: que hemos enviado y estamos esperando filtrar */
     private final Set<String> sentFiles = new HashSet<>();
     private LoginData data;
     private final Map<String, ImageIcon> avatars = new HashMap<>();
@@ -39,13 +40,12 @@ public class ConversationPanel extends JPanel {
             try {
                 client.connect(data, onReceive);
             } catch (IOException ex) {
-                // Mostrar opciones Verificar / Cancelar
                 SwingUtilities.invokeLater(() -> {
                     int choice = JOptionPane.showOptionDialog(
                             this,
-                            "No se pudo conectar a " + data.getServerIp() + ":" + data.getServerPort()
-                                    + "\nQuieres verificar los datos de conexion?",
-                            "Error de conexion",
+                            "No se pudo conectar a " + data.getServerIp() + ":" + data.getServerPort() +
+                                    "\n¿Quieres verificar los datos de conexión?",
+                            "Error de conexión",
                             JOptionPane.YES_NO_OPTION,
                             JOptionPane.ERROR_MESSAGE,
                             null,
@@ -54,7 +54,6 @@ public class ConversationPanel extends JPanel {
                     );
 
                     if (choice == JOptionPane.YES_OPTION) {
-                        // Intentar usar una entrada de la caché
                         List<String[]> cache = CacheManager.load();
                         String[] options = cache.stream()
                                 .map(arr -> arr[0] + " @ " + arr[1] + ":" + arr[2])
@@ -74,7 +73,6 @@ public class ConversationPanel extends JPanel {
                         }
 
                         if (selection != null) {
-                            // Parsear la selección de la caché
                             String[] parts = selection.split(" @ ")[1].split(":");
                             data = new LoginData(
                                     data.getUsername(),
@@ -82,10 +80,13 @@ public class ConversationPanel extends JPanel {
                                     parts[0],
                                     Integer.parseInt(parts[1])
                             );
-                            CacheManager.addAndSave(data.getUsername(), data.getServerIp(), data.getServerPort());
+                            CacheManager.addAndSave(
+                                    data.getUsername(),
+                                    data.getServerIp(),
+                                    data.getServerPort()
+                            );
                             connect();
                         } else {
-                            // Volver a mostrar diálogo completo de login
                             LoginData nuevo = LoginDialog.showDialog(
                                     (Frame) SwingUtilities.getWindowAncestor(this)
                             );
@@ -98,10 +99,8 @@ public class ConversationPanel extends JPanel {
                                 );
                                 connect();
                             }
-                            // si el usuario cancela, no reconectamos
                         }
                     }
-                    // si eligió "Cancelar" en el primer diálogo, no hacemos nada
                 });
             }
         }, "Connector").start();
@@ -125,7 +124,8 @@ public class ConversationPanel extends JPanel {
             sendAvatar();
             byte[] bytes = Files.readAllBytes(new File(dir, file).toPath());
             String b64 = Base64.getEncoder().encodeToString(bytes);
-            String msg = String.format("FILE:%s:%s:%s", data.getUsername(), file, b64);
+            String msg = String.format("FILE:%s:%s:%s",
+                    data.getUsername(), file, b64);
             sentFiles.add(msg);
             client.sendMessage(msg);
         } catch (IOException ex) {
@@ -159,51 +159,73 @@ public class ConversationPanel extends JPanel {
     private void handleMessage(String msg) {
         SwingUtilities.invokeLater(() -> {
             try {
-                if (msg.startsWith("AVATAR:")) {
-                    String[] p = msg.split(":", 3);
-                    String user = p[1];
-                    byte[] imgData = Base64.getDecoder().decode(p[2]);
-                    BufferedImage img = ImageIO.read(new ByteArrayInputStream(imgData));
-                    avatars.put(
-                            user,
-                            new ImageIcon(img.getScaledInstance(40,40,Image.SCALE_SMOOTH))
-                    );
-                    return;
-                }
-
+                // ——— Filtrado e inserción de nuestros propios FILE: ———
                 if (msg.startsWith("FILE:")) {
                     String[] parts = msg.split(":", 4);
                     if (parts.length != 4) return;
-                    String sender = parts[1];
-                    String name = parts[2];
+                    String sender    = parts[1];
+                    String name      = parts[2];
                     byte[] dataBytes = Base64.getDecoder().decode(parts[3]);
-                    boolean isOwn = sender.equals(data.getUsername());
+                    boolean isOwn    = sender.equals(data.getUsername());
                     ImageIcon avatar = avatars.getOrDefault(sender, data.getAvatar());
 
+                    // Insertar propio y descartar rebroadcast
+                    if (isOwn && sentFiles.remove(msg)) {
+                        BufferedImage img = null;
+                        try {
+                            img = ImageIO.read(new ByteArrayInputStream(dataBytes));
+                        } catch (IOException ignored) {}
+                        if (img != null) {
+                            layout.insertImageMessage(sender, img, name, dataBytes, avatar, true);
+                        } else {
+                            layout.insertFileMessage(sender, name, dataBytes, avatar, true);
+                        }
+                        return;
+                    }
+
+                    // Insertar archivo recibido de otros
                     BufferedImage img = null;
                     try {
                         img = ImageIO.read(new ByteArrayInputStream(dataBytes));
                     } catch (IOException ignored) {}
-
                     if (img != null) {
-                        layout.insertImageMessage(sender, img, name, dataBytes, avatar, isOwn);
+                        layout.insertImageMessage(sender, img, name, dataBytes, avatar, false);
                     } else {
-                        layout.insertFileMessage(sender, name, dataBytes, avatar, isOwn);
+                        layout.insertFileMessage(sender, name, dataBytes, avatar, false);
                     }
                     return;
                 }
 
-                int idx = msg.indexOf(": ");
-                if (idx != -1) {
-                    String sender = msg.substring(0, idx);
-                    String body = msg.substring(idx + 2);
-                    boolean isOwn = sender.equals(data.getUsername());
-                    ImageIcon avatar = avatars.getOrDefault(sender, data.getAvatar());
-                    layout.insertMessage(sender, body, avatar, isOwn);
-                } else {
-                    layout.insertSystemMessage(msg);
+                // ——— AVATAR: ———
+                if (msg.startsWith("AVATAR:")) {
+                    String[] p = msg.split(":", 3);
+                    String user = p[1];
+                    byte[] imgData = Base64.getDecoder().decode(p[2]);
+                    try {
+                        BufferedImage img = ImageIO.read(new ByteArrayInputStream(imgData));
+                        avatars.put(user, new ImageIcon(
+                                img.getScaledInstance(40,40,Image.SCALE_SMOOTH)
+                        ));
+                    } catch (IOException ignored) {}
                 }
-            } catch (BadLocationException | IOException e) {
+                // ——— CHUNK: (se deja tu lógica de servidor) ———
+                else if (msg.startsWith("CHUNK:")) {
+                    // tu código no necesita cambio aquí
+                }
+                // ——— Texto y sistema ———
+                else {
+                    int idx = msg.indexOf(": ");
+                    if (idx != -1) {
+                        String sender = msg.substring(0, idx);
+                        String body   = msg.substring(idx + 2);
+                        boolean isOwn = sender.equals(data.getUsername());
+                        ImageIcon avatar = avatars.getOrDefault(sender, data.getAvatar());
+                        layout.insertMessage(sender, body, avatar, isOwn);
+                    } else {
+                        layout.insertSystemMessage(msg);
+                    }
+                }
+            } catch (BadLocationException e) {
                 e.printStackTrace();
             }
         });
